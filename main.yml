@@ -1,0 +1,10 @@
+---
+- hosts: localhost
+
+  tasks:
+    
+    - name: Terraform
+      terraform:
+        project_path: "./terraform_aws/"
+        state: present
+
