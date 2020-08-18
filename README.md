@@ -5,7 +5,7 @@ You will need to input your AWS user credentials (with a user that has privilege
 This folder contains sub folders with /ansible that holds the playbook file you want to deploy on the server, the default playbook filename is:  vault.yml
 You will need to alter the `main.tf` file in the `terraform_aws folder` if you plan to change this filename.
 
-To initiazlize the Terraform , go into `/terraform_aws`  folder and run `terraform init` -  This will download the needed plugins Terraform uses to create an AWS instance. Then run 'terraform apply' and it will build out in AWS.
+To initiazlize the Terraform , go into `/terraform_aws`  folder and run `terraform init` -  This will download the needed plugins Terraform uses to create an AWS instance. Then run `terraform apply` and it will build out in AWS.
 
 Go back to the root directory of this app, containing this README.md file, and execute the install script, or run `ansible-playbook main.yml` from command line.  
 
