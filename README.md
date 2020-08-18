@@ -17,7 +17,6 @@ The remote server then follows the playbook that was uploaded, and installs the 
 *********IMPORTANT NOTICE**************
 Please consult the vault documentation on how to configure and start your vault server.
 https://www.vaultproject.io/docs
-***************************************
 
 Additionally, you can follow the commands in the HASHIvaultDBdemo.txt file for a complete walkthrough of HASHI Vault Transit, Encryption-as-a-Service + Dynamic DB Secrets.
 
