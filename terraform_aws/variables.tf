@@ -9,8 +9,8 @@ variable "private_key_path" {
 }
 
 variable "project_name" {
-  description = "Radar-Blip AWS"
-  default     = "Radar-Blip-AWS"
+  description = "SurfD4wgs terraform VAULT aws DEMO"
+  default     = "terraformVAULTaws"
 }
 
 variable "ssh_user" {
