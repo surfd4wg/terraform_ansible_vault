@@ -1,0 +1,342 @@
+----------
+# Connect to AWS Instance:
+ssh -i ./vault/vault.pem ubuntu@ec2-3-22-168-87.us-east-2.compute.amazonaws.com
+mkdir -p ~/vault && cd ~/vault
+
+----------
+# Install Vault (ubuntu):
+# https://learn.hashicorp.com/tutorials/vault/getting-started-install
+curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+sudo apt-get update && sudo apt-get install vault
+vault -autocomplete-install
+exec $SHELL
+
+----------
+# PRE-REQUISITE PACKAGES
+sudo snap install docker
+sudo apt install docker.io
+sudo apt install curl
+sudo snap install jq
+sudo apt install jq
+# https://dotnet.microsoft.com/download/dotnet-core/thank-you/sdk-2.1.809-linux-x64-binaries
+wget https://download.visualstudio.microsoft.com/download/pr/a44fb0b1-2c91-41d6-8970-321872341326/7e150d5bc0d3d96ae8c7cbd9e6b890fe/dotnet-sdk-2.1.809-linux-x64.tar.gz
+mkdir -p $HOME/dotnet && tar zxf dotnet-sdk-2.1.809-linux-x64.tar.gz -C $HOME/dotnet
+export DOTNET_ROOT=$HOME/dotnet
+export PATH=$PATH:$HOME/dotnet
+sudo docker pull mysql/mysql-server:5.7
+sudo docker ps # nothing yet
+mkdir -p ~/rewrap_data && cd ~/rewrap_data
+
+----------
+Starting Vault:
+vault server -dev
+Unseal Key: hLS6TktMFCJuPqYW8OBm/Df6WM3/j5/Cs26gLtUb+vs=
+Root Token: s.dAA9RztI0pVaeipOSZ2WO8rz
+
+export VAULT_ADDR=http://127.0.0.1:8200
+export VAULT_ROOT_TOKEN=s.dAA9RztI0pVaeipOSZ2WO8rz
+
+#===================================================================
+#===================== ENCRYPTION-AS-A-SERVICE ===================== 
+#===================================================================
+https://learn.hashicorp.com/tutorials/vault/eaas-transit-rewrap?in=vault/encryption-as-a-service
+
+git clone https://github.com/hashicorp/vault-guides.git
+cd ~/vault-guides/encryption/vault-transit-rewrap
+
+sudo snap install docker
+sudo apt install docker.io
+sudo apt install curl
+sudo snap install jq
+sudo apt install jq
+# https://dotnet.microsoft.com/download/dotnet-core/thank-you/sdk-2.1.809-linux-x64-binaries
+wget https://download.visualstudio.microsoft.com/download/pr/a44fb0b1-2c91-41d6-8970-321872341326/7e150d5bc0d3d96ae8c7cbd9e6b890fe/dotnet-sdk-2.1.809-linux-x64.tar.gz
+mkdir -p $HOME/dotnet && tar zxf dotnet-sdk-2.1.809-linux-x64.tar.gz -C $HOME/dotnet
+export DOTNET_ROOT=$HOME/dotnet
+export PATH=$PATH:$HOME/dotnet
+sudo docker pull mysql/mysql-server:5.7
+sudo docker ps # nothing yet
+mkdir -p ~/rewrap_data && cd ~/rewrap_data
+
+# create the policy
+vim rewrap_data.hcl
+# Manage the transit secrets engine
+path "transit/keys/*" {
+  capabilities = [ "create", "read", "update", "delete", "list", "sudo" ]
+}
+
+# Enable the transit secrets engine
+path "sys/mounts/transit" {
+  capabilities = [ "create", "update" ]
+}
+
+# Write ACL policies
+path "sys/policies/acl/*" {
+  capabilities = [ "create", "read", "update", "delete", "list" ]
+}
+
+# Create tokens for verification & test
+path "auth/token/create" {
+  capabilities = [ "create", "update", "sudo" ]
+}
+
+# start the docker MySQL instance
+sudo docker run --name mysql-rewrap \
+        -p 3306:3306 \
+        -v ~/rewrap-data/var/lib/mysql \
+        -e MYSQL_ROOT_PASSWORD=root \
+        -e MYSQL_ROOT_HOST=% \
+        -e MYSQL_DATABASE=my_app \
+        -e MYSQL_USER=vault \
+        -e MYSQL_PASSWORD=vaultpw \
+        -d mysql/mysql-server:5.7
+        
+sudo docker ps # something
+
+# enable the transit encryption engine
+vim transitkey.json
+{
+  "type": "transit"
+}
+
+vault secrets enable transit
+-or-
+curl --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
+       --request POST \
+       --data @transitkey.json \
+       $VAULT_ADDR/v1/sys/mounts/transit
+
+# create the parameters json
+vim transittoken.json
+{
+  "default_lease_ttl": 300,
+  "max_lease_ttl": 7200,
+  "force_no_cache": false
+}
+
+# create the first encryption key
+vault write -f transit/keys/my_app_key 
+-or-
+curl --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
+       --request POST \
+       $VAULT_ADDR/v1/transit/keys/my_app_key
+
+# create a policy
+vi ~/rewrap_example.hcl
+# rewrap_example.hcl
+path "transit/keys/my_app_key" {
+  capabilities = ["read"]
+}
+
+path "transit/rewrap/my_app_key" {
+  capabilities = ["update"]
+}
+
+# This last policy is needed to seed the database as part of the example.
+# It can be omitted if seeding is not required
+path "transit/encrypt/my_app_key" {
+  capabilities = ["update"]
+}
+
+# create the policy in vault
+vault policy write rewrap_example ~/rewrap_example.hcl
+
+# create the token to use with the policy in vault
+vault token create -policy=~/rewrap_example
+-or- 
+# API token request payload
+tee tokenrequest.json <<EOF
+{
+  "policy": "path \"transit/keys/my_app_key\" {\n  capabilities = [\"read\"]\n}\n\npath \"transit/rewrap/my_app_key\" {\n  capabilities = [\"update\"]\n}\n\n# This last policy is needed to seed the database as part of the example.\n# It can be omitted if seeding is not required\npath \"transit/encrypt/my_app_key\" {\n  capabilities = [\"update\"]\n} \n"
+}
+EOF
+# Create rewrap_example policy
+curl --request PUT --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
+       --data @tokenrequest.json \
+       $VAULT_ADDR/v1/sys/policies/acl/rewrap_example
+       
+# Create a token to use the rewrap_example policy
+curl --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
+       --request POST  \
+       --data '{ "policies": ["rewrap_example"] }' \
+       $VAULT_ADDR/v1/auth/token/create | jq
+
+{
+  "request_id": "cac1e864-6d6f-6684-83fb-01b1cc78e3bb",
+  "lease_id": "",
+  "renewable": false,
+  "lease_duration": 0,
+  "data": null,
+  "wrap_info": null,
+  "warnings": null,
+  "auth": {
+    "client_token": "s.8jFgKXAcLO3PGdQ2tDuIZto0",
+    "accessor": "xh6ZXtt07sYRYOyRpAxKvwFl",
+    "policies": [
+      "default",
+      "rewrap_example"
+    ],
+    "token_policies": [
+      "default",
+      "rewrap_example"
+    ],
+    "metadata": null,
+    "lease_duration": 2764800,
+    "renewable": true,
+    "entity_id": "",
+    "token_type": "service",
+    "orphan": false
+  }
+}
+# create client token env var
+export VAULT_CLIENT_TOKEN=s.8jFgKXAcLO3PGdQ2tDuIZto0
+
+# HERE IS THE MAGIC
+# SAMPLE APPLICATION RETRIEVES THE USER TOKEN, VAULT ADDRESS AND NAME OF THE TRANSIT KEY
+# CREATES A DATABASE IN MYSQL, ADDS DATA, THEN ENCRYPTS THE DATA IN THE DATABASE
+
+cd ~/vault/vault-guides/encryption/vault-transit-rewrap
+    
+VAULT_TOKEN=$VAULT_CLIENT_TOKEN VAULT_ADDR=http://127.0.0.1:8200 \
+        VAULT_TRANSIT_KEY=my_app_key SHOULD_SEED_USERS=true dotnet run
+
+#---------- CREATE v1 ----------    
+# TO SEE THE ENCRYPTED DATA IN THE DATABASE - WE JUST CREATED
+sudo docker exec -it mysql-rewrap mysql -uroot -proot
+show databases;
+connect my_app;
+show tables;
+DESC user_data;
+SELECT * FROM user_data WHERE city LIKE "vault:v1%" limit 20;
+\q
+
+#---------- ROTATE encryption keys ---------- 
+vault write -f transit/keys/my_app_key/rotate
+vault read transit/keys/my_app_key
+-or-
+curl --request POST --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
+       $VAULT_ADDR/v1/transit/keys/my_app_key/rotate
+       
+curl --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
+      $VAULT_ADDR/v1/transit/keys/my_app_key | jq
+
+#---------- REWRAP using new key ---------- 
+VAULT_TOKEN=$VAULT_CLIENT_TOKEN VAULT_ADDR=http://127.0.0.1:8200 \
+          VAULT_TRANSIT_KEY=my_app_key SHOULD_SEED_USERS=true dotnet run
+          
+#---------- THE Encryption-as-a-Service DEMO ----------
+sudo docker exec -it mysql-rewrap mysql -uroot -proot
+show databases;
+connect my_app;
+show tables;
+DESC user_data;
+SELECT * FROM user_data WHERE city LIKE "vault:v2%" limit 20;
+#---------- END OF EaaS DEMO ----------
+
+# list transit keys
+curl \
+    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    --request LIST \
+    http://127.0.0.1:8200/v1/transit/keys | jq
+    
+# detailed look at a specific key 
+curl \
+    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    http://127.0.0.1:8200/v1/transit/keys/my_app_key | jq
+    
+# Encrypt data
+base64 <<< "Clear Text Data"
+
+Put the result in encryptit.jason file
+{
+  "plaintext": "dGhlIHF1aWNrIGJyb3duIGZveAo="
+}
+
+curl \
+    --header "X-Vault-Token: ..." \
+    --request POST \
+    --data @encryptit.json \
+    http://127.0.0.1:8200/v1/transit/encrypt/my_app_key | jq
+    
+# Decrypt an encrypted database entry    
+curl \
+    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    --request POST \
+    --data @decryptit.json \
+    http://127.0.0.1:8200/v1/transit/decrypt/my_app_key | jq
+    
+curl \
+    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    --request POST \
+    --data @decryptbatch.json \
+    http://127.0.0.1:8200/v1/transit/decrypt/my_app_key | jq
+    
+base64 -d <<< U2V5bW91cg==
+    
+#===================================================================
+#======================== DYNAMIC DB SECRETS ======================= 
+#===================================================================
+# Dynamic DB Secrets: (MySQL)
+# https://learn.hashicorp.com/tutorials/vault/database-secrets
+mkdir -p ~/rewrap_data && cd ~/rewrap_data
+
+vault debug
+vault secrets list
+vault auth list
+
+desc mysql.user;
+select * from mysql.user;
+select host, user, password from mysql.user;
+show grants;
+
+# Configure the MySQL Plugin
+vault write database/config/my-mysql-database \
+    plugin_name="mysql-database-plugin" \
+    connection_url="{{username}}:{{password}}@tcp(127.0.0.1:3306)/" \
+    allowed_roles="app-read-role" \
+    username="root" \
+    password="root"
+-or-    
+curl \
+    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    --request POST \
+    --data @dynamicconfig.json \
+    http://127.0.0.1:8200/v1/database/config/my-mysql-database | jq
+    
+# Configure the MySQL role
+vault write database/roles/app-read-role \
+    db_name=my-mysql-database \
+    creation_statements="CREATE USER '{{name}}'@'%' IDENTIFIED BY '{{password}}';GRANT SELECT ON *.* TO '{{name}}'@'%';" \
+    default_ttl="300s" \
+    max_ttl="24h"
+
+-or-
+curl \
+    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    --request POST \
+    --data @dynamicuser.json \
+    http://127.0.0.1:8200/v1/database/roles/app-read-role | jq
+
+#---------- THE DYNAMIC DB CREDS DEMO ----------    
+# Generate the temp creds
+vault read /database/creds/app-read-role
+
+-or-
+curl \
+    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    http://127.0.0.1:8200/v1/database/creds/app-read-role | jq
+    
+sudo docker exec -it mysql-rewrap mysql -uv-root-app-read-r-FsT3IZw1wzmpBA -pA1a-6bzOs7C9mznbwFf8
+#---------- END OF DEMO ----------
+    
+vault list database/config
+vault list database/roles
+vault read database/roles/app-read-role
+vault read database/config/my-mysql-database/
+
+
+sudo docker exec -it mysql-rewrap mysql -uroot -proot
+SET GLOBAL log_output = 'TABLE';
+SET GLOBAL general_log = 'ON';
+SELECT * FROM mysql.general_log LIMIT 100;
