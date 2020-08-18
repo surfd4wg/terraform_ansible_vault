@@ -31,11 +31,11 @@ mkdir -p ~/rewrap_data && cd ~/rewrap_data
 ----------
 Starting Vault:
 vault server -dev
-Unseal Key: hLS6TktMFCJuPqYW8OBm/Df6WM3/j5/Cs26gLtUb+vs=
-Root Token: s.dAA9RztI0pVaeipOSZ2WO8rz
+Unseal Key: XXXXXXXXXX
+Root Token: YYYYYYYYYY
 
 export VAULT_ADDR=http://127.0.0.1:8200
-export VAULT_ROOT_TOKEN=s.dAA9RztI0pVaeipOSZ2WO8rz
+export VAULT_ROOT_TOKEN=YYYYYYYYYY
 
 #===================================================================
 #===================== ENCRYPTION-AS-A-SERVICE ===================== 
@@ -171,7 +171,7 @@ curl --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
   "wrap_info": null,
   "warnings": null,
   "auth": {
-    "client_token": "s.8jFgKXAcLO3PGdQ2tDuIZto0",
+    "client_token": "ZZZZZZZZZZ",
     "accessor": "xh6ZXtt07sYRYOyRpAxKvwFl",
     "policies": [
       "default",
@@ -190,7 +190,7 @@ curl --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
   }
 }
 # create client token env var
-export VAULT_CLIENT_TOKEN=s.8jFgKXAcLO3PGdQ2tDuIZto0
+export VAULT_CLIENT_TOKEN=ZZZZZZZZZZ
 
 # HERE IS THE MAGIC
 # SAMPLE APPLICATION RETRIEVES THE USER TOKEN, VAULT ADDRESS AND NAME OF THE TRANSIT KEY
@@ -236,13 +236,13 @@ SELECT * FROM user_data WHERE city LIKE "vault:v2%" limit 20;
 
 # list transit keys
 curl \
-    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
     --request LIST \
     http://127.0.0.1:8200/v1/transit/keys | jq
     
 # detailed look at a specific key 
 curl \
-    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
     http://127.0.0.1:8200/v1/transit/keys/my_app_key | jq
     
 # Encrypt data
@@ -261,13 +261,13 @@ curl \
     
 # Decrypt an encrypted database entry    
 curl \
-    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
     --request POST \
     --data @decryptit.json \
     http://127.0.0.1:8200/v1/transit/decrypt/my_app_key | jq
     
 curl \
-    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
     --request POST \
     --data @decryptbatch.json \
     http://127.0.0.1:8200/v1/transit/decrypt/my_app_key | jq
@@ -299,7 +299,7 @@ vault write database/config/my-mysql-database \
     password="root"
 -or-    
 curl \
-    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
     --request POST \
     --data @dynamicconfig.json \
     http://127.0.0.1:8200/v1/database/config/my-mysql-database | jq
@@ -313,7 +313,7 @@ vault write database/roles/app-read-role \
 
 -or-
 curl \
-    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
     --request POST \
     --data @dynamicuser.json \
     http://127.0.0.1:8200/v1/database/roles/app-read-role | jq
@@ -324,10 +324,10 @@ vault read /database/creds/app-read-role
 
 -or-
 curl \
-    --header "X-Vault-Token: s.dAA9RztI0pVaeipOSZ2WO8rz" \
+    --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
     http://127.0.0.1:8200/v1/database/creds/app-read-role | jq
     
-sudo docker exec -it mysql-rewrap mysql -uv-root-app-read-r-FsT3IZw1wzmpBA -pA1a-6bzOs7C9mznbwFf8
+sudo docker exec -it mysql-rewrap mysql -u<username token> -p<password token>
 #---------- END OF DEMO ----------
     
 vault list database/config
