@@ -1,5 +1,7 @@
 # Install HashiCorp Vault via Terraform and Ansible:
 
+This will provide an Ubuntu machine in AWS for demo'ing HASHIcorp Vault "Transit" Data Field Encryption (wrapper) and "Database" Dynamic DB Credentials features.
+
 You will need to input your AWS user credentials (with a user that has privileges to make an EC2 instance into the `/terraform_aws/variables.tf` file.
 
 This folder contains sub folders with /ansible that holds the playbook file you want to deploy on the server, the default playbook filename is:  vault.yml
