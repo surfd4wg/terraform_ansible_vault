@@ -1,7 +1,7 @@
 ----------
 # Connect to AWS Instance:
 ssh -i ./vault/vault.pem ubuntu@ec2-3-22-168-87.us-east-2.compute.amazonaws.com
-mkdir -p ~/vault && cd ~/vault
+mkdir -p ~/data/vault && cd ~/data/vault
 
 ----------
 # Install Vault (ubuntu):
@@ -26,16 +26,16 @@ export DOTNET_ROOT=$HOME/dotnet
 export PATH=$PATH:$HOME/dotnet
 sudo docker pull mysql/mysql-server:5.7
 sudo docker ps # nothing yet
-mkdir -p ~/rewrap_data && cd ~/rewrap_data
+mkdir -p ~/data/rewrap_data && cd ~/data/rewrap_data
 
 ----------
 Starting Vault:
 vault server -dev
-Unseal Key: XXXXXXXXXX
-Root Token: YYYYYYYYYY
+Unseal Key: 8nQi6+IqBd2Sd/Osqv4gGHuz1YFFZWwedWBQg1yxahA=
+Root Token: s.j0rpEyC3IGFLEJR1qn2MzLoO
 
 export VAULT_ADDR=http://127.0.0.1:8200
-export VAULT_ROOT_TOKEN=YYYYYYYYYY
+export VAULT_ROOT_TOKEN=s.j0rpEyC3IGFLEJR1qn2MzLoO
 
 #===================================================================
 #===================== ENCRYPTION-AS-A-SERVICE ===================== 
@@ -43,21 +43,7 @@ export VAULT_ROOT_TOKEN=YYYYYYYYYY
 https://learn.hashicorp.com/tutorials/vault/eaas-transit-rewrap?in=vault/encryption-as-a-service
 
 git clone https://github.com/hashicorp/vault-guides.git
-cd ~/vault-guides/encryption/vault-transit-rewrap
-
-sudo snap install docker
-sudo apt install docker.io
-sudo apt install curl
-sudo snap install jq
-sudo apt install jq
-# https://dotnet.microsoft.com/download/dotnet-core/thank-you/sdk-2.1.809-linux-x64-binaries
-wget https://download.visualstudio.microsoft.com/download/pr/a44fb0b1-2c91-41d6-8970-321872341326/7e150d5bc0d3d96ae8c7cbd9e6b890fe/dotnet-sdk-2.1.809-linux-x64.tar.gz
-mkdir -p $HOME/dotnet && tar zxf dotnet-sdk-2.1.809-linux-x64.tar.gz -C $HOME/dotnet
-export DOTNET_ROOT=$HOME/dotnet
-export PATH=$PATH:$HOME/dotnet
-sudo docker pull mysql/mysql-server:5.7
-sudo docker ps # nothing yet
-mkdir -p ~/rewrap_data && cd ~/rewrap_data
+cd ~/data/vault-guides/encryption/vault-transit-rewrap
 
 # create the policy
 vim rewrap_data.hcl
@@ -84,7 +70,7 @@ path "auth/token/create" {
 # start the docker MySQL instance
 sudo docker run --name mysql-rewrap \
         -p 3306:3306 \
-        -v ~/rewrap-data/var/lib/mysql \
+        -v ~/data/rewrap-data/var/lib/mysql \
         -e MYSQL_ROOT_PASSWORD=root \
         -e MYSQL_ROOT_HOST=% \
         -e MYSQL_DATABASE=my_app \
@@ -171,7 +157,7 @@ curl --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
   "wrap_info": null,
   "warnings": null,
   "auth": {
-    "client_token": "ZZZZZZZZZZ",
+    "client_token": "s.8jFgKXAcLO3PGdQ2tDuIZto0",
     "accessor": "xh6ZXtt07sYRYOyRpAxKvwFl",
     "policies": [
       "default",
@@ -190,13 +176,13 @@ curl --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
   }
 }
 # create client token env var
-export VAULT_CLIENT_TOKEN=ZZZZZZZZZZ
+export VAULT_CLIENT_TOKEN=s.PNZQlPauY3q4f27B118OGq6X
 
 # HERE IS THE MAGIC
 # SAMPLE APPLICATION RETRIEVES THE USER TOKEN, VAULT ADDRESS AND NAME OF THE TRANSIT KEY
 # CREATES A DATABASE IN MYSQL, ADDS DATA, THEN ENCRYPTS THE DATA IN THE DATABASE
 
-cd ~/vault/vault-guides/encryption/vault-transit-rewrap
+cd ~/data/vault/vault-guides/encryption/vault-transit-rewrap
     
 VAULT_TOKEN=$VAULT_CLIENT_TOKEN VAULT_ADDR=http://127.0.0.1:8200 \
         VAULT_TRANSIT_KEY=my_app_key SHOULD_SEED_USERS=true dotnet run
@@ -248,7 +234,7 @@ curl \
 # Encrypt data
 base64 <<< "Clear Text Data"
 
-Put the result in encryptit.jason file
+Put the result in encryptit.json file
 {
   "plaintext": "dGhlIHF1aWNrIGJyb3duIGZveAo="
 }
@@ -280,15 +266,16 @@ base64 -d <<< U2V5bW91cg==
 # Dynamic DB Secrets: (MySQL)
 # https://learn.hashicorp.com/tutorials/vault/database-secrets
 mkdir -p ~/rewrap_data && cd ~/rewrap_data
+vault secrets enable database
 
-vault debug
+#vault debug
 vault secrets list
 vault auth list
 
-desc mysql.user;
-select * from mysql.user;
-select host, user, password from mysql.user;
-show grants;
+#desc mysql.user;
+#select * from mysql.user;
+#select host, user, password from mysql.user;
+#show grants;
 
 # Configure the MySQL Plugin
 vault write database/config/my-mysql-database \
@@ -327,7 +314,13 @@ curl \
     --header "X-Vault-Token: $VAULT_ROOT_TOKEN" \
     http://127.0.0.1:8200/v1/database/creds/app-read-role | jq
     
-sudo docker exec -it mysql-rewrap mysql -u<username token> -p<password token>
+sudo docker exec -it mysql-rewrap mysql -uv-root-app-read-r-AuUaEuo69nGYKt -pA1a-VLalwrAT4i4BN3A4
+
+show databases;
+connect my_app;
+show tables;
+DESC user_data;
+SELECT * FROM user_data WHERE city LIKE "vault:v2%" limit 20;
 #---------- END OF DEMO ----------
     
 vault list database/config
